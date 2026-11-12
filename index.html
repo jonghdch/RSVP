@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RSVP 리더</title>
+  <meta name="description" content="글을 붙여넣으면 한 단어씩 빠르게 보여 주는 읽기 도구">
+  <link rel="stylesheet" href="src/style.css">
+  <script type="module" src="src/app.js"></script>
+</head>
+<body>
+  <main class="page">
+    <h1 class="title">RSVP 리더</h1>
+
+    <section class="reader" id="reader" aria-label="읽기 화면">
+      <button type="button" class="stage" id="stage" disabled>
+        <span class="word" id="word" aria-hidden="true"><span class="word-before"></span><span class="word-pivot"></span><span class="word-after"></span></span>
+        <span class="stage-message" id="stage-message">아래에 글을 붙여넣으세요</span>
+      </button>
+      <p class="visually-hidden" id="announce" aria-live="polite"></p>
+
+      <input type="range" class="range progress" id="progress" min="0" max="0" value="0" step="1" aria-label="읽은 위치" disabled>
+      <p class="status" id="status">0 / 0 단어</p>
+
+      <div class="controls">
+        <button type="button" class="btn" id="btn-start" disabled>처음</button>
+        <button type="button" class="btn" id="btn-prev" aria-label="이전 단어" disabled>◀<span class="btn-long"> 한 단어</span></button>
+        <button type="button" class="btn btn-primary" id="btn-play" disabled>재생</button>
+        <button type="button" class="btn" id="btn-next" aria-label="다음 단어" disabled><span class="btn-long">한 단어 </span>▶</button>
+      </div>
+
+      <label class="speed">
+        <span class="speed-label">속도</span>
+        <input type="range" class="range" id="speed" min="100" max="1000" step="25" value="300" aria-label="읽기 속도(분당 단어 수)">
+        <output id="speed-value" for="speed">300 WPM</output>
+      </label>
+    </section>
+
+    <section class="source">
+      <label class="source-label" for="source">읽을 글</label>
+      <textarea id="source" rows="10" placeholder="여기에 글을 붙여넣으세요" spellcheck="false"></textarea>
+      <p class="shortcuts">단축키(입력칸 밖에서): <kbd>Space</kbd> 재생·정지 · <kbd>←</kbd><kbd>→</kbd> 한 단어 · <kbd>↑</kbd><kbd>↓</kbd> 속도</p>
+    </section>
+  </main>
+</body>
+</html>
