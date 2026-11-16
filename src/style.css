@@ -14,8 +14,9 @@
   color-scheme: light;
 }
 
+/* 다크 색: 사용자가 헤더에서 고른 모드(data-theme)가 시스템 설정보다 우선한다 */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #161513;
     --surface: #211f1c;
     --ink: #ece9e2;
@@ -26,6 +27,17 @@
     --focus: #8ab4ff;
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #161513;
+  --surface: #211f1c;
+  --ink: #ece9e2;
+  --muted: #a39e94;
+  --line: #3a3732;
+  --line-strong: #77726a;
+  --accent: #ff7a6b;
+  --focus: #8ab4ff;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -44,14 +56,53 @@ body {
   padding: 32px var(--space) 48px;
 }
 
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
 .title {
-  margin: 0 0 20px;
+  margin: 0;
   font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
-/* ① 단어 표시 영역 — 단어 전체를 가운데에 둔다 */
+/* ⑮ 화면 모드 버튼 — 지금 모드가 아니라 바꿀 모드의 아이콘을 보여 준다 */
+.theme-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.theme-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.theme-btn .icon-sun { display: none; }
+.theme-btn[data-dark] .icon-sun { display: block; }
+.theme-btn[data-dark] .icon-moon { display: none; }
+@media (hover: hover) {
+  .theme-btn:hover { border-color: var(--line-strong); }
+}
+@media (pointer: coarse) {
+  .theme-btn { width: 44px; height: 44px; }
+}
+
+/* ① 단어 표시 영역 — 빨간 글자를 세로 중심선(위아래 눈금)에 맞춘다 */
 .stage {
   position: relative;
   display: grid;
@@ -87,16 +138,19 @@ body {
 .stage[data-state="ended"]::before,
 .stage[data-state="ended"]::after { display: none; }
 
+/* 빨간 글자를 가운데 열에 두고 앞뒤를 양옆 열에 붙인다 → 빨간 글자가 항상 가운데 선 위 */
 .word {
-  display: flex;
-  justify-content: center; /* 넘쳐도 양쪽으로 같게 넘치도록 */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   width: 100%;
   font-size: calc(clamp(2rem, 7vw, 3.5rem) * var(--fit, 1));
   font-weight: 500;
   white-space: pre;
   font-variant-ligatures: none;
 }
+.word-before { overflow: hidden; text-align: right; }
 .word-pivot { color: var(--accent); font-weight: 700; }
+.word-after { overflow: hidden; text-align: left; }
 
 .stage-message {
   color: var(--muted);
@@ -106,6 +160,95 @@ body {
 .stage[data-state="empty"] .word,
 .stage[data-state="ended"] .word { display: none; }
 .stage:not([data-state="empty"]):not([data-state="ended"]) .stage-message { display: none; }
+
+/* ⑭ 지금 읽는 부분의 목차 제목 — 카드 위쪽 가운데. 제목이 있으면 위 눈금 자리를 대신한다 */
+.stage-heading {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  max-width: calc(100% - 112px);
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none; /* 눌러도 단어 영역(재생/정지)이 받는다 */
+}
+.stage-heading:empty { display: none; }
+.stage-wrap.has-heading .stage::before { display: none; }
+
+/* ⑪ 전체 화면 — 단어 영역만 화면 전체로. 브라우저 전체 화면(:fullscreen)과 덮기 방식(.is-covering)을 같은 모양으로 */
+.stage-wrap { position: relative; }
+
+.fullscreen-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.fullscreen-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fullscreen-btn .icon-exit { display: none; }
+.fullscreen-btn[data-on] .icon-enter { display: none; }
+.fullscreen-btn[data-on] .icon-exit { display: block; }
+@media (pointer: coarse) {
+  .fullscreen-btn { width: 44px; height: 44px; top: 4px; right: 4px; }
+}
+.fullscreen-btn:disabled { display: none; }
+@media (hover: hover) {
+  .fullscreen-btn:hover { color: var(--ink); background: var(--bg); }
+}
+
+.stage-wrap:fullscreen,
+.stage-wrap.is-covering {
+  background: var(--surface);
+}
+.stage-wrap.is-covering {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+:is(.stage-wrap:fullscreen, .stage-wrap.is-covering) .stage {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+:is(.stage-wrap:fullscreen, .stage-wrap.is-covering) .stage::before,
+:is(.stage-wrap:fullscreen, .stage-wrap.is-covering) .stage::after { display: none; }
+:is(.stage-wrap:fullscreen, .stage-wrap.is-covering) .word { font-size: calc(clamp(2.5rem, 9vw, 7rem) * var(--fit, 1)); }
+:is(.stage-wrap:fullscreen, .stage-wrap.is-covering) .fullscreen-btn {
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  width: 44px;
+  height: 44px;
+  opacity: 0.35;
+}
+:is(.stage-wrap:fullscreen, .stage-wrap.is-covering) .fullscreen-btn:is(:hover, :focus-visible) { opacity: 1; }
+:is(.stage-wrap:fullscreen, .stage-wrap.is-covering) .stage-heading {
+  top: max(28px, env(safe-area-inset-top));
+  max-width: calc(100% - 160px);
+  font-size: 1rem;
+}
+body.no-scroll { overflow: hidden; }
 
 /* ② 진행 막대 · ⑧ 속도 */
 /* 트랙은 얇게 보여도 눌리는 높이는 44px */
@@ -123,6 +266,51 @@ body {
   margin-top: 8px;
 }
 
+/* ⑫ 문단 눈금 — 진행 막대 손잡이가 움직이는 폭(양끝 손잡이 반지름만큼 안쪽)에 맞춘다 */
+.paragraph-marks {
+  --thumb: 16px;
+  position: relative;
+  height: 20px;
+  margin-top: -12px;
+}
+.paragraph-marks[hidden] { display: none; }
+
+.paragraph-mark {
+  position: absolute;
+  top: 0;
+  left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--at));
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transform: translateX(-50%);
+  cursor: pointer;
+}
+.paragraph-mark::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--line-strong);
+  transform: translateX(-50%);
+}
+.paragraph-mark[aria-current="true"]::before {
+  width: 3px;
+  height: 14px;
+  background: var(--ink);
+}
+@media (hover: hover) {
+  .paragraph-mark:hover::before { background: var(--ink); }
+}
+@media (pointer: coarse) {
+  .paragraph-marks { height: 44px; }
+  .paragraph-mark { width: 32px; height: 44px; }
+}
+
 .status {
   margin: 0;
   color: var(--muted);
@@ -133,10 +321,26 @@ body {
 /* ④~⑦ 조작 버튼 */
 .controls {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.4fr 1fr;
-  gap: 8px;
+  grid-template-columns: repeat(3, 1fr) 1.2fr repeat(3, 1fr);
+  gap: 6px;
   margin-top: 20px;
 }
+.controls .btn {
+  min-width: 0;
+  padding: 0 4px;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+/* ⑥ 재생 아이콘 — data-mode 에 맞는 아이콘 하나만 */
+.btn-icon { display: grid; place-items: center; }
+.btn-icon svg { width: 22px; height: 22px; fill: currentColor; }
+.btn-icon .stroke { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.btn-icon svg { display: none; }
+.btn-icon[data-mode="play"] .icon-play,
+.btn-icon[data-mode="pause"] .icon-pause,
+.btn-icon[data-mode="restart"] .icon-restart { display: block; }
+
 
 .btn {
   min-height: 44px;
@@ -232,9 +436,26 @@ kbd {
   white-space: nowrap;
 }
 
+@media (max-width: 640px) {
+  .btn-long { display: none; }
+}
+
 @media (max-width: 480px) {
   .page { padding-top: 20px; }
-  .btn-long { display: none; }
+  .controls { gap: 4px; }
+  /* 폭이 좁으면 화살표를 글자 위에 올려 한 줄을 지킨다 */
+  .controls .btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    padding: 0 2px;
+    font-size: 0.75rem;
+    line-height: 1.15;
+  }
+  .controls .btn .arrow { font-size: 0.625rem; }
+  .controls .btn:has(.arrow:last-child) { flex-direction: column-reverse; }
 }
 
 @media (pointer: coarse) {
