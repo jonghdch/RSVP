@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tokenize, pivotIndex, wordDelay, remainingMs, remainingTable, paragraphStarts, paragraphAt, sentenceStarts, stepTo } from '../src/rsvp.js';
+import { tokenize, pivotIndex, wordDelay, remainingTable, paragraphStarts, paragraphAt, sentenceStarts, stepTo } from '../src/rsvp.js';
 
 test('tokenize splits on any whitespace and marks paragraph ends', () => {
   const words = tokenize('  안녕하세요  반갑습니다.\n\n둘째   문단\t끝 ');
@@ -42,27 +42,11 @@ test('wordDelay matches the reference site: sentence end 2.5x, comma 2x, over 12
   assert.equal(wordDelay({ text: 'extraordinary.', paragraphEnd: false }, 300), 500);
 });
 
-test('remainingMs sums delays from the next word to the end', () => {
-  const words = tokenize('하나 둘. 셋');
-  assert.equal(remainingMs(words, 0, 300), 500 + 500);
-  assert.equal(remainingMs(words, 2, 300), 0);
-});
-
 test('tokenize normalizes decomposed Hangul (NFD paste) so the pivot never splits a syllable', () => {
   const nfd = '한국어'.normalize('NFD');
   const [word] = tokenize(nfd);
   assert.equal(word.text, '한국어');
   assert.equal([...word.text][pivotIndex(word.text)], '국');
-});
-
-test('remainingTable matches remainingMs at every index', () => {
-  const words = tokenize('첫째, 둘째. 셋째\n\n넷째 extraordinary');
-  const table = remainingTable(words, 450);
-  words.forEach((_, i) => {
-    let ms = 0;
-    for (let j = i + 1; j < words.length; j++) ms += wordDelay(words[j], 450);
-    assert.equal(table[i], ms);
-  });
 });
 
 test('paragraphStarts lists the first word index of each paragraph', () => {
@@ -130,4 +114,39 @@ test('long or number-only lines are not headings', () => {
   assert.equal(tokenize(long)[0].heading, null);
   assert.equal(tokenize('2026. 11. 13 기록')[0].heading, null);
   assert.equal(tokenize('3.5 퍼센트가 늘었다')[0].heading, '3.5 퍼센트가 늘었다');
+});
+
+test('numbered lines right next to each other are a list, not headings', () => {
+  const words = tokenize('1. 서론\n과일 목록.\n1. 사과\n2. 배\n3. 귤\n\n2. 본론\n본문.');
+  const by = Object.fromEntries(words.map((w) => [w.text, w.heading]));
+  assert.equal(by['사과'], '1. 서론');
+  assert.equal(by['배'], '1. 서론');
+  assert.equal(by['귤'], '1. 서론');
+  assert.equal(by['본론'], '2. 본론');
+  // 목록 항목 줄 끝은 문장 끝이 아니다
+  assert.equal(words.find((w) => w.text === '사과').headingEnd, false);
+});
+
+test('remainingTable includes the current word and is 0 only past the end', () => {
+  const words = tokenize('하나 둘. 셋');
+  // 하나 200, 둘. 500, 셋(문단 끝) 500
+  assert.deepEqual(remainingTable(words, 300), [1200, 1000, 500]);
+  assert.deepEqual(remainingTable([], 300), []);
+});
+
+test('a leading number marker never ends a sentence, even on a long non-heading line', () => {
+  const long = '1. ' + '아주 긴 목록 항목 문장이 계속 이어진다 '.repeat(4).trim() + '.\n다음 줄';
+  const words = tokenize(long);
+  assert.equal(words[0].heading, null);
+  assert.deepEqual(sentenceStarts(words), [0, words.length - 2]);
+  assert.equal(wordDelay(words[0], 300), 200);
+});
+
+test('paragraphAt matches a linear scan for many starts', () => {
+  const starts = [0, 3, 4, 10, 25, 26, 40];
+  for (let i = 0; i < 50; i++) {
+    let expect = 0;
+    while (expect + 1 < starts.length && starts[expect + 1] <= i) expect++;
+    assert.equal(paragraphAt(starts, i), expect);
+  }
 });

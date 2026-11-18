@@ -2,6 +2,7 @@
 import { tokenize, pivotIndex, wordDelay, remainingTable, paragraphStarts, paragraphAt, sentenceStarts, stepTo } from './rsvp.js';
 
 const MIN_FIT = 0.3; // 긴 단어를 줄일 때 글자 크기 하한 (기본 크기 대비)
+const LATE_LIMIT = 50; // 타이머가 이보다(ms) 늦으면 따라잡지 않고 지금부터 다시 센다
 
 const $ = (id) => document.getElementById(id);
 const el = {
@@ -37,6 +38,7 @@ const state = {
   wpm: 300,
   remaining: [],
   paragraphs: [], // 문단마다 첫 단어 위치
+  markedParagraph: -1, // 문단 눈금에 지금 표시된 문단
   sentences: [], // 문장마다 첫 단어 위치
   timer: null,
   shownAt: 0, // 지금 단어가 나타난 시각 (performance.now 기준)
@@ -104,7 +106,10 @@ function render() {
   el.status.textContent = empty
     ? '0 / 0 단어'
     : `${index + 1} / ${words.length} 단어${paragraphText} · 남은 시간 ${formatTime(ended ? 0 : state.remaining[index])}`;
-  [...el.marks.children].forEach((mark, i) => mark.setAttribute('aria-current', String(i === paragraph)));
+  if (paragraph !== state.markedParagraph) { // 문단이 바뀔 때만 눈금 표시를 고친다
+    state.markedParagraph = paragraph;
+    [...el.marks.children].forEach((mark, i) => mark.setAttribute('aria-current', String(i === paragraph)));
+  }
 
   el.prev.disabled = el.prevSentence.disabled = el.prevParagraph.disabled = empty || index === 0;
   el.next.disabled = empty || unitStep('word', 1) === index;
@@ -131,7 +136,9 @@ function tick() {
   const due = state.shownAt + wordDelay(state.words[state.index], state.wpm);
   if (state.index < state.words.length - 1) {
     state.index += 1;
-    state.shownAt = due; // 목표 시각 기준이라 렌더 시간만큼 느려지지 않는다
+    // 목표 시각 기준이라 렌더 시간만큼 느려지지 않는다. 다만 탭 전환 등으로 타이머가 크게 늦으면
+    // 밀린 단어를 몰아서 넘기지 않도록 지금 시각에 다시 맞춘다
+    state.shownAt = Math.max(due, performance.now() - LATE_LIMIT);
     render();
     schedule();
   } else {
@@ -163,13 +170,17 @@ function togglePlay() {
   schedule();
 }
 
-function moveTo(index) {
+// 위치 이동. 버튼·단축키는 멈추고(keepPlaying 없음), 진행 막대·문단 눈금은 재생 중이면 이어서 재생한다.
+// 멈춘 상태로 끝나면 화면 읽기 프로그램에 이동한 단어를 알린다 (진행 막대는 자기 값 안내가 있어 quiet)
+function moveTo(index, { keepPlaying = false, quiet = false } = {}) {
   if (!state.words.length) return;
-  stop();
+  if (!keepPlaying) stop();
   state.index = Math.min(Math.max(index, 0), state.words.length - 1);
   state.ended = false;
+  state.shownAt = performance.now();
   render();
-  announce(`${state.words[state.index].text} (${state.index + 1} / ${state.words.length})`);
+  schedule();
+  if (!state.playing && !quiet) announce(`${state.words[state.index].text} (${state.index + 1} / ${state.words.length})`);
 }
 
 function setSpeed(wpm) {
@@ -187,8 +198,18 @@ function isFullscreen() {
   return document.fullscreenElement === el.stageWrap || el.stageWrap.classList.contains('is-covering');
 }
 
+// 전체 화면 동안 단어 영역 밖은 inert — Tab 이 가려진 입력칸·버튼으로 빠져나가지 않게
+function setOutsideInert(on) {
+  for (let node = el.stageWrap; node && node !== document.body; node = node.parentElement) {
+    for (const sibling of node.parentElement.children) {
+      if (sibling !== node) sibling.inert = on;
+    }
+  }
+}
+
 function syncFullscreen() {
   const on = isFullscreen();
+  setOutsideInert(on);
   const label = on ? '전체 화면 끝내기' : '전체 화면';
   el.fullscreen.setAttribute('aria-label', label);
   el.fullscreen.title = label;
@@ -204,8 +225,15 @@ function setCovering(on) {
 
 async function toggleFullscreen() {
   if (isFullscreen()) {
-    if (document.fullscreenElement) await document.exitFullscreen();
-    else setCovering(false);
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        // 브라우저가 이미 전체 화면을 끝낸 경우(Esc 와 겹침) — 상태는 fullscreenchange 가 맞춘다
+      }
+    } else {
+      setCovering(false);
+    }
   } else if (el.stageWrap.requestFullscreen && document.fullscreenEnabled) {
     try {
       await el.stageWrap.requestFullscreen();
@@ -255,18 +283,9 @@ for (const [button, unit, step] of [
   button.addEventListener('click', () => moveTo(unitStep(unit, step)));
 }
 
-el.progress.addEventListener('input', () => jumpTo(Number(el.progress.value)));
+el.progress.addEventListener('input', () => moveTo(Number(el.progress.value), { keepPlaying: true, quiet: true }));
 
 el.speed.addEventListener('input', () => setSpeed(Number(el.speed.value)));
-
-// 재생 중이면 계속 재생한다 (진행 막대를 끌 때와 같음)
-function jumpTo(index) {
-  state.index = index;
-  state.ended = false;
-  state.shownAt = performance.now();
-  render();
-  schedule();
-}
 
 // 문단 눈금: 문단이 2개 이상일 때만. 키보드는 PageUp/PageDown 으로 대신하므로 탭 순서에서 뺀다
 function buildMarks() {
@@ -280,7 +299,7 @@ function buildMarks() {
     const preview = words.slice(start, start + 4).map((w) => w.text).join(' ');
     mark.title = `${i + 1}문단: ${preview}`;
     mark.setAttribute('aria-label', `${i + 1}문단으로 이동`);
-    mark.addEventListener('click', () => jumpTo(start));
+    mark.addEventListener('click', () => moveTo(start, { keepPlaying: true }));
     return mark;
   }));
   el.marks.hidden = paragraphs.length < 2;
@@ -292,6 +311,7 @@ el.source.addEventListener('input', () => {
   state.remaining = remainingTable(state.words, state.wpm);
   state.paragraphs = paragraphStarts(state.words);
   state.sentences = sentenceStarts(state.words);
+  state.markedParagraph = -1;
   buildMarks();
   state.index = 0;
   state.ended = false;

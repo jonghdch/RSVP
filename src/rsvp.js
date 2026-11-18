@@ -9,12 +9,15 @@ const LONG_WORD = 12;
 const FACTOR = { sentence: 2.5, comma: 2, long: 1.5 };
 
 // 목차 제목 줄: "1. 서론", "2.1 방법", "3) 결과" 처럼 번호(1~3자리, 점으로 이어짐) 뒤에 공백과 글자가 오는 짧은 줄.
-// "2026. 11. 13" 같은 날짜는 번호 뒤가 숫자라 제외된다
+// "2026. 11. 13" 같은 날짜는 번호 뒤가 숫자라 제외된다.
+// 번호 줄이 위나 아래 줄과 붙어 있으면 본문의 번호 목록으로 보고 제목에서 뺀다 (2026-11-18 사용자 결정)
 const HEADING = /^\d{1,3}(?:\.\d{1,3})*(?:[.)]|(?=\s))\s+\D/u;
 const HEADING_MAX = 40;
 
-function isHeading(line) {
-  return line.length <= HEADING_MAX && HEADING.test(line);
+function isHeading(lines, li) {
+  const numbered = (line) => line !== undefined && HEADING.test(line);
+  if (numbered(lines[li - 1]) || numbered(lines[li + 1])) return false;
+  return lines[li].length <= HEADING_MAX && numbered(lines[li]);
 }
 
 // 단어마다 text, paragraphEnd(문단 끝), headingEnd(제목 줄 끝), heading(지금 속한 목차 제목, 없으면 null)
@@ -24,7 +27,7 @@ export function tokenize(text) {
   for (const paragraph of text.normalize('NFC').split(/\n\s*\n/)) {
     const lines = paragraph.split('\n').map((line) => line.trim()).filter(Boolean);
     lines.forEach((line, li) => {
-      const headingLine = isHeading(line);
+      const headingLine = isHeading(lines, li);
       if (headingLine) heading = line.replace(/\s+/g, ' ');
       const parts = line.split(/\s+/);
       parts.forEach((part, i) => {
@@ -33,7 +36,7 @@ export function tokenize(text) {
           text: part,
           paragraphEnd: lineEnd && li === lines.length - 1,
           headingEnd: lineEnd && headingLine,
-          headingMark: headingLine && i === 0 && /^[\d.)]+$/.test(part), // 제목 앞 번호 "1." — 문장 끝이 아니다
+          lineMark: i === 0 && parts.length > 1 && /^\d{1,3}(?:\.\d{1,3})*[.)]?$/.test(part), // 줄 맨 앞 번호 "1." — 문장 끝이 아니다
           heading,
         });
       });
@@ -61,7 +64,7 @@ function lastChar(word) {
 
 // 문장이 끝나는 단어: 닫는 따옴표·괄호 앞이 . ? ! 류이거나, 문단·목차 제목 줄의 마지막 단어
 function endsSentence(word) {
-  if (word.headingMark && !word.headingEnd) return false;
+  if (word.lineMark) return false;
   return /[.?!。？！…]/u.test(lastChar(word)) || word.paragraphEnd || Boolean(word.headingEnd);
 }
 
@@ -76,15 +79,10 @@ export function wordDelay(word, wpm) {
   return Math.round(base * factor);
 }
 
-// 현재 단어 다음부터 끝까지 남은 시간
-export function remainingMs(words, index, wpm) {
-  return remainingTable(words, wpm)[index] ?? 0;
-}
-
-// 위치마다 남은 시간 표. 재생 중 매 단어마다 전체를 다시 더하지 않도록 글·속도가 바뀔 때 한 번 만든다
+// 위치마다 남은 시간 표(지금 단어 포함). 재생 중 매 단어마다 전체를 다시 더하지 않도록 글·속도가 바뀔 때 한 번 만든다
 export function remainingTable(words, wpm) {
   const table = new Array(words.length).fill(0);
-  for (let i = words.length - 2; i >= 0; i--) table[i] = table[i + 1] + wordDelay(words[i + 1], wpm);
+  for (let i = words.length - 1; i >= 0; i--) table[i] = (table[i + 1] ?? 0) + wordDelay(words[i], wpm);
   return table;
 }
 
@@ -95,9 +93,14 @@ export function paragraphStarts(words) {
 
 // index 번째 단어가 들어 있는 칸 번호 (0부터). starts = 문단·문장 시작 위치 목록
 export function paragraphAt(starts, index) {
-  let p = 0;
-  while (p + 1 < starts.length && starts[p + 1] <= index) p++;
-  return p;
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) { // 재생 중 단어마다 불리므로 이진 탐색
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= index) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
 }
 
 // 문장마다 첫 단어의 위치 (문장 단위로 넘길 때)

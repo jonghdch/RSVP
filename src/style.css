@@ -218,14 +218,12 @@ body {
   .fullscreen-btn:hover { color: var(--ink); background: var(--bg); }
 }
 
-.stage-wrap:fullscreen,
-.stage-wrap.is-covering {
-  background: var(--surface);
-}
+.stage-wrap:fullscreen { background: var(--surface); }
 .stage-wrap.is-covering {
   position: fixed;
   inset: 0;
   z-index: 10;
+  background: var(--surface);
 }
 :is(.stage-wrap:fullscreen, .stage-wrap.is-covering) .stage {
   height: 100%;
