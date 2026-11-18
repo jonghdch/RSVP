@@ -249,7 +249,8 @@ async function toggleFullscreen() {
 document.addEventListener('fullscreenchange', syncFullscreen);
 el.fullscreen.addEventListener('click', toggleFullscreen);
 
-// ⑮ 화면 모드: 처음에는 시스템 설정을 따르고, 누르면 반대 모드로 고정한다 (저장하지 않음)
+// ⑮ 화면 모드: 처음에는 시스템 설정을 따르고, 누르면 반대 모드로 고정한다.
+// 고른 모드는 브라우저에 기억한다 (2026-11-18 사용자 결정). 읽기는 index.html 머리에서 한다
 const themeBtn = $('btn-theme');
 const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -267,7 +268,11 @@ function syncThemeButton() {
 }
 
 themeBtn.addEventListener('click', () => {
-  document.documentElement.dataset.theme = isDark() ? 'light' : 'dark';
+  const theme = isDark() ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme;
+  try {
+    localStorage.setItem('rsvp-theme', theme);
+  } catch {} // 사생활 보호 모드 등에서 저장이 막혀도 이번 화면에는 적용된다
   syncThemeButton();
 });
 systemDark.addEventListener('change', syncThemeButton);
