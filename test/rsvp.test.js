@@ -94,7 +94,7 @@ test('pivotIndex ignores leading/trailing punctuation so "아니다." highlights
 });
 
 test('tokenize tags each word with the latest numbered heading line ("1. ", "2.1 ")', () => {
-  const words = tokenize('머리말 문장.\n\n1. 서론\n본문 하나.\n\n2.1 방법과 자료\n본문 둘.\n2) 이것도 제목');
+  const words = tokenize('머리말 문장.\n\n1. 서론\n본문 하나.\n\n2. 본론\n본문.\n\n2.1 방법과 자료\n본문 둘.\n2) 이것도 제목');
   const by = Object.fromEntries(words.map((w) => [w.text, w.heading]));
   assert.equal(by['머리말'], null);
   assert.equal(by['서론'], '1. 서론');
@@ -113,7 +113,6 @@ test('long or number-only lines are not headings', () => {
   const long = '1. ' + '아주 긴 목록 항목 문장이 계속 이어진다 '.repeat(4);
   assert.equal(tokenize(long)[0].heading, null);
   assert.equal(tokenize('2026. 11. 13 기록')[0].heading, null);
-  assert.equal(tokenize('3.5 퍼센트가 늘었다')[0].heading, '3.5 퍼센트가 늘었다');
 });
 
 test('numbered lines right next to each other are a list, not headings', () => {
@@ -125,6 +124,15 @@ test('numbered lines right next to each other are a list, not headings', () => {
   assert.equal(by['본론'], '2. 본론');
   // 목록 항목 줄 끝은 문장 끝이 아니다
   assert.equal(words.find((w) => w.text === '사과').headingEnd, false);
+});
+
+test('a decimal number is a heading only after its parent heading ("2." before "2.1")', () => {
+  assert.equal(tokenize('3.5 퍼센트가 늘었다')[0].heading, null);
+  const words = tokenize('1. 서론\n본문.\n\n3.5 퍼센트가 늘었다\n\n2. 본론\n본문.\n\n2.1 자료\n본문.\n\n2.1.3 세부\n끝.');
+  const by = Object.fromEntries(words.map((w) => [w.text, w.heading]));
+  assert.equal(by['퍼센트가'], '1. 서론');
+  assert.equal(by['자료'], '2.1 자료');
+  assert.equal(by['세부'], '2.1.3 세부');
 });
 
 test('remainingTable includes the current word and is 0 only past the end', () => {

@@ -10,24 +10,31 @@ const FACTOR = { sentence: 2.5, comma: 2, long: 1.5 };
 
 // 목차 제목 줄: "1. 서론", "2.1 방법", "3) 결과" 처럼 번호(1~3자리, 점으로 이어짐) 뒤에 공백과 글자가 오는 짧은 줄.
 // "2026. 11. 13" 같은 날짜는 번호 뒤가 숫자라 제외된다.
-// 번호 줄이 위나 아래 줄과 붙어 있으면 본문의 번호 목록으로 보고 제목에서 뺀다 (2026-11-18 사용자 결정)
+// 번호 줄이 위나 아래 줄과 붙어 있으면 본문의 번호 목록으로 보고 제목에서 뺀다 (2026-11-18 사용자 결정).
+// "2.1" 같은 소수 번호는 상위 제목 "2." 가 앞에 나왔을 때만 제목이다 — "3.5 퍼센트가 늘었다" 를 거른다 (같은 날 사용자 결정)
 const HEADING = /^\d{1,3}(?:\.\d{1,3})*(?:[.)]|(?=\s))\s+\D/u;
 const HEADING_MAX = 40;
 
-function isHeading(lines, li) {
+function isHeading(lines, li, seen) {
   const numbered = (line) => line !== undefined && HEADING.test(line);
   if (numbered(lines[li - 1]) || numbered(lines[li + 1])) return false;
-  return lines[li].length <= HEADING_MAX && numbered(lines[li]);
+  if (lines[li].length > HEADING_MAX || !numbered(lines[li])) return false;
+  const number = lines[li].match(/^[\d.]*\d/)[0];
+  const parent = number.slice(0, number.lastIndexOf('.'));
+  if (parent && !seen.has(parent)) return false;
+  seen.add(number);
+  return true;
 }
 
 // 단어마다 text, paragraphEnd(문단 끝), headingEnd(제목 줄 끝), heading(지금 속한 목차 제목, 없으면 null)
 export function tokenize(text) {
   const words = [];
   let heading = null;
+  const seen = new Set(); // 지금까지 나온 제목 번호
   for (const paragraph of text.normalize('NFC').split(/\n\s*\n/)) {
     const lines = paragraph.split('\n').map((line) => line.trim()).filter(Boolean);
     lines.forEach((line, li) => {
-      const headingLine = isHeading(lines, li);
+      const headingLine = isHeading(lines, li, seen);
       if (headingLine) heading = line.replace(/\s+/g, ' ');
       const parts = line.split(/\s+/);
       parts.forEach((part, i) => {
